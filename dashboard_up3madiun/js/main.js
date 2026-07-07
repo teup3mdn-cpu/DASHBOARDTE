@@ -56,15 +56,41 @@ function refreshBadge(msg){
   el.textContent = msg;
 }
 
+/* ---- Tampilkan/sembunyikan seluruh panel "Muat data" (input link CSV + tombol) ----
+   Setelah link sekali dimasukkan & tersimpan, panel ini otomatis disembunyikan supaya
+   tampilan dashboard bersih. Tombol ⚙ di header dipakai untuk membuka lagi kalau perlu
+   mengganti link sumber. Kotak input manual (regu, TS, biaya, dsb) TIDAK ikut disembunyikan
+   karena itu memang harus diisi/diubah manual tiap periode, bukan bagian dari "muat data". */
+function toggleConfigVisibility(force){
+  const shouldHide = force !== undefined ? force : !document.body.classList.contains('hide-config');
+  document.body.classList.toggle('hide-config', shouldHide);
+  const btn = document.getElementById('toggleConfigBtn');
+  const note = document.getElementById('configStatusNote');
+  if(shouldHide){
+    btn.textContent = '⚙ Ubah link sumber data';
+    note.style.display = 'block';
+    note.textContent = 'Link sumber data tersimpan di browser ini dan otomatis dimuat ulang tiap 5 menit — tidak perlu klik "Muat data" lagi.';
+  } else {
+    btn.textContent = '✕ Tutup pengaturan';
+    note.style.display = 'none';
+  }
+}
+
 async function autoLoadAll(isInitial){
   const links = getSavedLinks();
   const tabsWithLink = AUTO_TABS.filter(t => links[t.urlId]);
-  if(!tabsWithLink.length) return;
+  if(!tabsWithLink.length){
+    // Belum ada link tersimpan sama sekali -> tampilkan panel "Muat data" agar user bisa setup pertama kali.
+    toggleConfigVisibility(false);
+    return;
+  }
   if(isInitial){
     tabsWithLink.forEach(({urlId})=>{
       const input = document.getElementById(urlId);
       if(input) input.value = links[urlId];
     });
+    // Sudah ada link tersimpan dari sesi sebelumnya -> sembunyikan panel "Muat data" secara default.
+    toggleConfigVisibility(true);
   }
   refreshBadge('🔄 Memuat ulang data...');
   for(const {urlId, loadFn} of tabsWithLink){
@@ -75,5 +101,10 @@ async function autoLoadAll(isInitial){
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{ autoLoadAll(true); });
+// Auto-refresh: selama tab/halaman ini tetap terbuka di browser, data dimuat ulang otomatis
+// tiap AUTO_REFRESH_MS (5 menit) TANPA perlu klik apa pun, dan juga langsung dimuat ulang
+// begitu user kembali membuka tab ini (visibilitychange). Jadi cukup masukkan link CSV
+// SEKALI di awal (atau klik "Lihat contoh"); setelahnya dashboard mengikuti perubahan di
+// sumber (Google Sheet) secara otomatis selama halaman ini masih terbuka.
 setInterval(()=>autoLoadAll(false), AUTO_REFRESH_MS);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') autoLoadAll(false); });

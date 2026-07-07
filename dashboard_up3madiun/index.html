@@ -12,8 +12,14 @@
 <body>
 
 
-<h1>Dashboard kinerja UP3 Madiun</h1>
-<p class="app-sub">Ringkasan kinerja operasional untuk pengambilan keputusan — susut, penjualan, P2TL, dan prognosa</p>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+  <div>
+    <h1 style="margin-bottom:4px;">Dashboard kinerja UP3 Madiun</h1>
+    <p class="app-sub" style="margin-bottom:0;">Ringkasan kinerja operasional untuk pengambilan keputusan — susut, penjualan, P2TL, dan prognosa</p>
+  </div>
+  <button id="toggleConfigBtn" onclick="toggleConfigVisibility()" style="flex-shrink:0;padding:8px 14px;border:1px solid var(--border);background:#fff;color:var(--navy2);font-weight:700;font-size:12px;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;gap:6px;box-shadow:var(--shadow-sm);">⚙ Pengaturan sumber data</button>
+</div>
+<div id="configStatusNote" style="display:none;font-size:11.5px;color:var(--muted);margin:-10px 0 14px;"></div>
 
 <div class="tabs">
   <button class="tab-btn active" data-tab="susut">Susut per ULP</button>

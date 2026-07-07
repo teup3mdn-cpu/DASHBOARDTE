@@ -14,14 +14,27 @@ function p2tlRender(rows){
     setStatus('p2tl_status', false, 'Kolom setelah "Bulan" kurang dari 4 (Target_Bulanan, Realisasi_Bulanan, Target_Kumulatif, Realisasi_Kumulatif). Cek urutan kolom CSV.');
     return;
   }
-  p2tlData = rows.map(r=>({
+  // PENTING: sumber data (mis. sheet master/DASH_P2TL) bisa memuat kolom ULP dengan
+  // BANYAK baris per bulan — satu baris per ULP (MADIUN KOTA, MAGETAN, NGAWI, dst) DITAMBAH
+  // satu baris agregat "UP3 MADIUN". Tab evaluasi P2TL ini harus selalu memakai angka
+  // UP3 MADIUN (total gabungan), bukan ULP tertentu. Kalau ada kolom ULP, filter dulu ke
+  // baris yang ULP-nya "UP3 MADIUN" supaya tidak salah ambil baris ULP pertama yang
+  // kebetulan match bulan yang sama (itu penyebab target Juli sebelumnya salah tampil
+  // sebagai 161.878 kWh milik MADIUN KOTA, bukan 898.438 kWh milik UP3 MADIUN).
+  const ulpKey = findKey(rows[0], ['ulp','unit']);
+  let sourceRows = rows;
+  if(ulpKey){
+    const up3Rows = rows.filter(r => /^UP3\b/i.test(String(r[ulpKey]||'').trim()));
+    if(up3Rows.length) sourceRows = up3Rows;
+  }
+  p2tlData = sourceRows.map(r=>({
     bulan:r[bKey],
     tb:num(r[tbKey]), rb:num(r[rbKey]),
     cumT:num(r[tkKey]), cumR:num(r[rkKey]),
     realisasiFilled: num(r[rkKey])>0 || num(r[rbKey])>0
   })).filter(d=>d.bulan);
   p2tlRecalc();
-  setStatus('p2tl_status', true, 'Data berhasil dimuat (kolom diambil dari posisi setelah Bulan: '+tbKey+', '+rbKey+', '+tkKey+', '+rkKey+').');
+  setStatus('p2tl_status', true, 'Data berhasil dimuat' + (ulpKey ? ' (difilter khusus baris UP3 MADIUN dari kolom ULP)' : '') + ' — kolom: '+tbKey+', '+rbKey+', '+tkKey+', '+rkKey+'.');
 }
 // ---- Pemetaan nama bulan Indonesia (penuh & singkatan) ke indeks 0-11, dipakai untuk
 // mencocokkan baris data P2TL dengan bulan kalender YANG SEDANG BERJALAN saat ini
@@ -33,32 +46,6 @@ function indoMonthIndex(name){
   let idx = INDO_BULAN_FULL.indexOf(n);
   if(idx === -1) idx = INDO_BULAN_ABBR.indexOf(n.slice(0,3));
   return idx; // -1 kalau tidak dikenali
-}
-// ---- Ambil angka level UP3 MADIUN (bukan per-ULP) untuk bulan tertentu ----
-// Prioritas: (1) baris total "UP3 MADIUN" eksplisit dari CSV per-ULP (mis. hasil publish
-// range B86:G97 di sheet sumber yang sudah berisi baris agregat UP3), (2) kalau tidak ada,
-// jumlahkan manual seluruh ULP untuk bulan yang sama. Return null kalau data ULP belum dimuat
-// sama sekali, supaya p2tlRecalc bisa fallback ke p2tlData (CSV utama) seperti semula.
-function up3AggregateFor(bulanName){
-  const idx = indoMonthIndex(bulanName);
-  if(idx === -1) return null;
-  if(ulpContribUp3Data.length){
-    const row = ulpContribUp3Data.find(d=>indoMonthIndex(d.bulan)===idx);
-    if(row) return { tb:row.tb, rb:row.rb, cumT:row.tk, cumR:row.rk, realisasiFilled:row.rkFilled };
-  }
-  if(ulpContribData.length){
-    const rowsB = ulpContribData.filter(d=>indoMonthIndex(d.bulan)===idx);
-    if(rowsB.length){
-      return {
-        tb: rowsB.reduce((s,d)=>s+d.tb,0),
-        rb: rowsB.reduce((s,d)=>s+d.rb,0),
-        cumT: rowsB.reduce((s,d)=>s+d.tk,0),
-        cumR: rowsB.reduce((s,d)=>s+d.rk,0),
-        realisasiFilled: rowsB.every(d=>d.rkFilled)
-      };
-    }
-  }
-  return null;
 }
 function p2tlRecalc(){
   if(!p2tlData.length) return;
@@ -76,15 +63,6 @@ function p2tlRecalc(){
     const rowsWithReal = rows.filter(r=>r.rb>0);
     last = rowsWithReal.length ? rowsWithReal[rowsWithReal.length-1] : (rows.filter(r=>r.realisasiFilled).slice(-1)[0] || rows[rows.length-1]);
   }
-
-  // ---- PENTING: paksa angka KPI pakai level UP3 MADIUN (total gabungan), bukan angka
-  // ULP tunggal yang kebetulan ada di CSV utama (p2tl_url). Kalau data per-ULP sudah
-  // dimuat (tombol "Muat data ULP" / sumber B86:G97), timpa tb/rb/cumT/cumR di sini. ----
-  const up3Agg = up3AggregateFor(last.bulan);
-  if(up3Agg){
-    last = { ...last, tb:up3Agg.tb, rb:up3Agg.rb, cumT:up3Agg.cumT, cumR:up3Agg.cumR, realisasiFilled:up3Agg.realisasiFilled };
-  }
-
   const gap = last.cumT - last.cumR;
   const gapPct = last.cumT ? (gap/last.cumT*100) : 0;
   const capaian = last.cumT ? (last.cumR/last.cumT*100) : 0;
@@ -222,10 +200,7 @@ function p2tlUlpRender(rows){
   ulpContribData = dataAll.filter(d=>!isUp3Total(d.ulp));
   ulpContribUp3Data = dataAll.filter(d=>isUp3Total(d.ulp));
   p2tlUlpRecalc();
-  // Kartu KPI atas (p2tl_kpi) pakai angka level UP3 begitu data per-ULP tersedia —
-  // refresh di sini juga, jaga-jaga kalau CSV ULP baru dimuat SETELAH CSV utama.
-  if(p2tlData.length) p2tlRecalc();
-  setStatus('p2tl_ulp_status', true, 'Data ULP berhasil dimuat' + (ulpContribUp3Data.length ? ' (baris total UP3 MADIUN ditemukan).' : ', total UP3 dihitung otomatis dari jumlah seluruh ULP.'));
+  setStatus('p2tl_ulp_status', true, 'Data ULP berhasil dimuat.');
 }
 function p2tlUlpRecalc(){
   if(!ulpContribData.length) return;
@@ -326,3 +301,4 @@ function p2tlUlpSample(){
   });
   p2tlUlpRender(rows);
 }
+

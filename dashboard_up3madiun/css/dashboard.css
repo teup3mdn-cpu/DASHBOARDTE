@@ -68,6 +68,7 @@
   .pill.good{background:var(--green-bg);color:var(--green-text);}
   .pill.bad{background:var(--red-bg);color:var(--red-text);}
   .empty{color:var(--muted);font-size:13px;padding:26px;text-align:center;}
+  body.hide-config .config{display:none !important;}
 
   /* ---- Executive summary (director-level narrative) ---- */
   .exec-summary{background:linear-gradient(135deg,var(--navy-deep) 0%,var(--navy) 55%,var(--navy2) 100%);border-radius:14px;padding:22px 26px;margin-bottom:18px;color:#fff;box-shadow:var(--shadow-lg);position:relative;overflow:hidden;}
